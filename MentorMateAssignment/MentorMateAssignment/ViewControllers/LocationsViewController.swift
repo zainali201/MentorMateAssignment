@@ -14,6 +14,8 @@ class LocationsViewController: UIViewController
     @IBOutlet weak var tblView: UITableView!
     @IBOutlet weak var activityIndicator: UIActivityIndicatorView!
     
+    var reachability: Reachability = Reachability.networkReachabilityForInternetConnection()!
+    
     //MARK: - Properties
     var locationsArray: [Location] = [Location]()
     var manager: LocationStorageManager!
@@ -35,7 +37,7 @@ class LocationsViewController: UIViewController
     //MARK: - Custom functions
     func getNearbyPlaces()
     {
-        if Reachability.isConnectedToNetwork()
+        if reachability.isReachable
         {
             APIManager.shared.getNearByPlaces(latitude: "\(Globals.latitude)", longitude: "\(Globals.longitude)", completion: {(locations) in
                 

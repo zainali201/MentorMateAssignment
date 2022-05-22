@@ -5,31 +5,79 @@
 //  Created by Zain Ali on 5/21/22.
 //
 
-import Foundation
-public class Reachability {
+import SystemConfiguration
+
+enum ReachabilityStatus {
+    case notReachable
+    case reachableViaWiFi
+    case reachableViaWWAN
+}
+
+class Reachability
+{
+    private var networkReachability: SCNetworkReachability?
     
-    class func isConnectedToNetwork()->Bool{
-        
-        var Status:Bool = false
-        let url = NSURL(string: "https://www.google.com")
-        let request = NSMutableURLRequest(url: url! as URL)
-        request.httpMethod = "HEAD"
-        request.cachePolicy = NSURLRequest.CachePolicy.reloadIgnoringLocalAndRemoteCacheData
-        request.timeoutInterval = 10.0
-        var response: URLResponse?
-        do {
-            var data = try NSURLConnection.sendSynchronousRequest(request as URLRequest, returning: &response) as NSData?
+    var isReachable: Bool {
+        switch currentReachabilityStatus {
+        case .notReachable:
+            return false
+        case .reachableViaWiFi, .reachableViaWWAN:
+            return true
         }
-        catch {
-            
-        }
-        
-        if let httpResponse = response as? HTTPURLResponse {
-            if httpResponse.statusCode == 200 {
-                Status = true
+    }
+    
+    init?(hostAddress: sockaddr_in) {
+        var address = hostAddress
+     
+        guard let defaultRouteReachability = withUnsafePointer(to: &address, {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, $0)
             }
+        }) else {
+            return nil
         }
-        
-        return Status
+     
+        networkReachability = defaultRouteReachability
+        if networkReachability == nil {
+            return nil
+        }
+    }
+
+    static func networkReachabilityForInternetConnection() -> Reachability? {
+        var zeroAddress = sockaddr_in()
+        zeroAddress.sin_len = UInt8(MemoryLayout.size(ofValue: zeroAddress))
+        zeroAddress.sin_family = sa_family_t(AF_INET)
+        return Reachability(hostAddress: zeroAddress)
+    }
+    
+    private var flags: SCNetworkReachabilityFlags {
+     
+        var flags = SCNetworkReachabilityFlags(rawValue: 0)
+     
+        if let reachability = networkReachability, withUnsafeMutablePointer(to: &flags, { SCNetworkReachabilityGetFlags(reachability, UnsafeMutablePointer($0)) }) == true {
+            return flags
+        }
+        else {
+            return []
+        }
+    }
+    
+    var currentReachabilityStatus: ReachabilityStatus {
+     
+        if flags.contains(.reachable) == false {
+            return .notReachable
+        }
+        else if flags.contains(.isWWAN) == true {
+            return .reachableViaWWAN
+        }
+        else if flags.contains(.connectionRequired) == false {
+            return .reachableViaWiFi
+        }
+        else if (flags.contains(.connectionOnDemand) == true || flags.contains(.connectionOnTraffic) == true) && flags.contains(.interventionRequired) == false {
+            return .reachableViaWiFi
+        }
+        else {
+            return .notReachable
+        }
     }
 }
